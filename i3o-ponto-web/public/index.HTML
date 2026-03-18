@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>I3O - Painel de Gestão</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { background-color: #020617; font-family: 'Inter', sans-serif; }
+        .i3o-card { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); border: 1px solid #1e293b; }
+        .btn-disabled { opacity: 0.2; cursor: not-allowed; pointer-events: none; filter: grayscale(1); }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+    </style>
+</head>
+<body class="text-slate-200">
+
+    <div id="login-page" class="flex items-center justify-center min-h-screen p-4">
+        <div class="i3o-card p-12 rounded-[2.5rem] w-full max-w-sm text-center shadow-2xl">
+            <h1 class="text-6xl font-black text-blue-600 italic mb-2 tracking-tighter">I3O</h1>
+            <p class="text-slate-500 text-[10px] mb-10 uppercase tracking-[0.4em] font-bold">Autenticação</p>
+            <div class="space-y-4 text-left">
+                <input type="text" id="user" placeholder="Utilizador" class="w-full p-4 rounded-2xl bg-slate-900 border border-slate-700 outline-none focus:border-blue-600 text-white">
+                <input type="password" id="pass" placeholder="Palavra-passe" class="w-full p-4 rounded-2xl bg-slate-900 border border-slate-700 outline-none focus:border-blue-600 text-white">
+                <button onclick="loginLocal()" class="w-full bg-blue-600 hover:bg-blue-500 py-5 rounded-2xl font-bold text-white shadow-lg transition-all mt-4 uppercase tracking-widest text-xs">Entrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="dashboard" class="hidden">
+        <nav class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950/90 sticky top-0 z-50">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl font-black text-blue-600 italic">I3O</span>
+                <span id="role-badge" class="text-[9px] bg-blue-600/10 text-blue-400 border border-blue-600/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest"></span>
+            </div>
+            <div class="flex items-center gap-6">
+                <span id="user-display" class="text-sm font-bold text-slate-400 border-r border-slate-800 pr-6"></span>
+                <button onclick="location.reload()" class="text-red-500 text-xs font-black uppercase hover:text-red-400 transition-all">Sair</button>
+            </div>
+        </nav>
+
+        <main class="p-6 lg:p-12 max-w-6xl mx-auto">
+            
+            <div id="admin-view" class="hidden">
+                <div class="flex flex-col lg:flex-row justify-between items-end mb-10 gap-6">
+                    <div class="w-full">
+                        <h2 class="text-4xl font-black italic text-white uppercase tracking-tighter">Registos de Assiduidade</h2>
+                        <div class="flex gap-4 mt-2">
+                            <button onclick="limparHistorico()" class="text-[9px] text-red-500 hover:text-red-400 font-black uppercase tracking-widest underline decoration-red-900">Limpar Tudo</button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-wrap items-center gap-3 bg-slate-900 p-3 rounded-2xl border border-slate-800 w-full lg:w-auto">
+                        <input type="date" id="filtro-data" onchange="renderizarTabela()" class="bg-transparent text-blue-400 font-bold outline-none px-2">
+                        <button onclick="exportarExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-black px-4 py-3 rounded-xl uppercase">Exportar</button>
+                    </div>
+                </div>
+
+                <div class="i3o-card rounded-[2.5rem] overflow-hidden shadow-2xl">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-900/80 text-slate-500 text-[10px] uppercase tracking-[0.2em] font-black">
+                            <tr>
+                                <th class="p-6">Colaborador</th>
+                                <th class="p-6">Estado</th>
+                                <th class="p-6 text-center">Entrada</th>
+                                <th class="p-6 text-center">Saída</th>
+                                <th class="p-6 text-center">Data</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-corpo" class="divide-y divide-slate-800/50"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="colab-view" class="hidden text-center">
+                <div class="i3o-card p-16 rounded-[4rem] inline-block w-full max-w-lg shadow-2xl">
+                    <div id="clock" class="text-8xl font-mono font-black text-white mb-12 italic tracking-tighter">00:00:00</div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <button id="btn-entrada" onclick="baterPonto('ENTRADA')" class="py-10 bg-emerald-600 hover:bg-emerald-500 rounded-[2rem] text-xl font-black shadow-xl shadow-emerald-900/10">ENTRADA</button>
+                        <button id="btn-saida" onclick="baterPonto('SAÍDA')" class="py-10 bg-rose-600 hover:bg-rose-500 rounded-[2rem] text-xl font-black shadow-xl shadow-rose-900/10 btn-disabled">SAÍDA</button>
+                    </div>
+                    <p id="status-msg" class="text-slate-500 text-[10px] mt-10 font-black uppercase tracking-[0.3em] italic">Sistema Pronto</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let sessao = null;
+
+        setInterval(() => {
+            const el = document.getElementById('clock');
+            if(el) el.innerText = new Date().toLocaleTimeString('pt-PT');
+        }, 1000);
+
+        window.onload = () => {
+            const hoje = new Date().toISOString().split('T')[0];
+            document.getElementById('filtro-data').value = hoje;
+        };
+
+        function loginLocal() {
+            const u = document.getElementById('user').value.trim().toLowerCase();
+            const p = document.getElementById('pass').value;
+            const usuarios = {
+                "123": { nome: "DIRETOR GERAL", role: "ADMIN", pass: "123" },
+                "carlos": { nome: "CARLOS SILVA", role: "USER", pass: "123" },
+                "andre": { nome: "ANDRÉ SILVA", role: "USER", pass: "123" }
+            };
+
+            if(usuarios[u] && usuarios[u].pass === p) {
+                sessao = usuarios[u];
+                document.getElementById('login-page').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                document.getElementById('user-display').innerText = sessao.nome;
+                document.getElementById('role-badge').innerText = sessao.role;
+
+                if(sessao.role === 'ADMIN') {
+                    document.getElementById('admin-view').classList.remove('hidden');
+                    renderizarTabela();
+                } else {
+                    document.getElementById('colab-view').classList.remove('hidden');
+                    atualizarBotoes();
+                }
+            } else { alert("Acesso Negado."); }
+        }
+
+        function atualizarBotoes() {
+            const db = JSON.parse(localStorage.getItem('i3o_ponto_db') || '[]');
+            const hoje = new Date().toLocaleDateString('pt-PT');
+            const meusHoje = db.filter(x => x.nome === sessao.nome && x.data === hoje);
+            const ultimo = meusHoje[meusHoje.length - 1];
+
+            const bE = document.getElementById('btn-entrada'), bS = document.getElementById('btn-saida'), msg = document.getElementById('status-msg');
+
+            if (!ultimo || ultimo.tipo === 'SAÍDA') {
+                bE.classList.remove('btn-disabled'); bS.classList.add('btn-disabled');
+                msg.innerText = "Aguardando Entrada"; msg.className = "text-slate-500 text-[10px] mt-10 font-black uppercase tracking-[0.3em] italic";
+            } else {
+                bE.classList.add('btn-disabled'); bS.classList.remove('btn-disabled');
+                msg.innerText = "Em serviço ativo"; msg.className = "text-emerald-500 text-[10px] mt-10 font-black uppercase tracking-[0.3em] italic";
+            }
+        }
+
+        function baterPonto(tipo) {
+            const db = JSON.parse(localStorage.getItem('i3o_ponto_db') || '[]');
+            db.push({
+                nome: sessao.nome, tipo: tipo,
+                data: new Date().toLocaleDateString('pt-PT'),
+                dataISO: new Date().toISOString().split('T')[0],
+                hora: new Date().toLocaleTimeString('pt-PT'),
+                ts: Date.now()
+            });
+            localStorage.setItem('i3o_ponto_db', JSON.stringify(db));
+            alert(`${tipo} registada.`);
+            atualizarBotoes();
+        }
+
+        function agruparDados(dataFiltro) {
+            const db = JSON.parse(localStorage.getItem('i3o_ponto_db') || '[]');
+            const filtrados = db.filter(x => x.dataISO === dataFiltro);
+            const agrupados = {};
+
+            filtrados.forEach(reg => {
+                if (!agrupados[reg.nome]) {
+                    agrupados[reg.nome] = { nome: reg.nome, entrada: '--:--:--', saida: '--:--:--', data: reg.data, estado: 'Pendente' };
+                }
+                if (reg.tipo === 'ENTRADA') {
+                    agrupados[reg.nome].entrada = reg.hora;
+                    agrupados[reg.nome].estado = 'Em Serviço';
+                } else if (reg.tipo === 'SAÍDA') {
+                    agrupados[reg.nome].saida = reg.hora;
+                    agrupados[reg.nome].estado = 'Concluído';
+                }
+            });
+            return Object.values(agrupados);
+        }
+
+        function renderizarTabela() {
+            const dataFiltro = document.getElementById('filtro-data').value;
+            const dados = agruparDados(dataFiltro);
+            const corpo = document.getElementById('tabela-corpo');
+
+            corpo.innerHTML = dados.map(r => `
+                <tr class="hover:bg-slate-800/30 transition-all border-b border-slate-900/50 last:border-0">
+                    <td class="p-6 font-black text-white italic uppercase tracking-tighter">${r.nome}</td>
+                    <td class="p-6">
+                        <span class="px-3 py-1 rounded-lg text-[8px] font-black border ${r.estado === 'Concluído' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'} uppercase">
+                            ${r.estado}
+                        </span>
+                    </td>
+                    <td class="p-6 text-center text-blue-400 font-mono font-bold">${r.entrada}</td>
+                    <td class="p-6 text-center text-rose-400 font-mono font-bold">${r.saida}</td>
+                    <td class="p-6 text-slate-500 text-center text-xs font-bold">${r.data}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="5" class="p-20 text-center text-slate-800 font-black italic">Sem registos</td></tr>';
+        }
+
+        function limparHistorico() {
+            if (confirm("⚠️ DESEJA APAGAR TODO O HISTÓRICO DA I3O? Esta ação não pode ser desfeita.")) {
+                localStorage.removeItem('i3o_ponto_db');
+                renderizarTabela();
+            }
+        }
+
+        function exportarExcel() {
+            const dataFiltro = document.getElementById('filtro-data').value;
+            const dados = agruparDados(dataFiltro);
+            if (!dados.length) return alert("Nada para exportar.");
+
+            let csv = "COLABORADOR;ESTADO;ENTRADA;SAIDA;DATA\n";
+            dados.forEach(r => { csv += `${r.nome};${r.estado};${r.entrada};${r.saida};${r.data}\n`; });
+
+            const blob = new Blob(["\ufeff", csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `I3O_RELATORIO_${dataFiltro}.csv`;
+            link.click();
+        }
+    </script>
+</body>
+</html>

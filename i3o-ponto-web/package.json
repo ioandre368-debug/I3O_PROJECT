@@ -1,0 +1,7 @@
+{
+  "name": "i3o-system-paris",
+  "version": "1.0.0",
+  "dependencies": {
+    "@vercel/blob": "latest"
+  }
+}
